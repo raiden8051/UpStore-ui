@@ -1,0 +1,39 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  ANGULAR_CLI_VERSION: 17
+  SSH_PRIVATE_KEY: $EC2_SSH_PRIVATE_KEY # Stored in GitLab CI/CD variables
+  EC2_USER: ec2-user
+  EC2_HOST: $EC2_HOST_IP
+  EC2_PATH: /var/www/html
+
+cache:
+  paths:
+    - node_modules/
+
+before_script:
+  - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
+  - eval $(ssh-agent -s)
+  - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
+  - ssh-keyscan $EC2_HOST >> ~/.ssh/known_hosts
+
+build:
+  stage: build
+  image: node:18
+  script:
+    - npm install -g @angular/cli@${ANGULAR_CLI_VERSION}
+    - npm install
+    - ng build --configuration=production
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 hour
+
+deploy:
+  stage: deploy
+  script:
+    - scp -r dist/* $EC2_USER@$EC2_HOST:$EC2_PATH
